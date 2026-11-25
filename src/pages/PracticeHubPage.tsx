@@ -15,6 +15,7 @@ import {
   XCircle,
 } from 'lucide-react';
 import { QuestionStemRenderer } from '@/components/exam/QuestionStemRenderer';
+import { HintCoachDrawer } from '@/components/shared/HintCoachDrawer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,6 +26,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { generateQuestionHints } from '@/data/learningGuides';
 import { logStudySession } from '@/db/backup';
 import { db } from '@/db/database';
 import { useLiveQuery } from '@/db/useLiveQuery';
@@ -649,6 +651,35 @@ export function PracticeHubPage() {
                 prompt={currentQuestion.prompt}
               />
             </div>
+
+            {/* Progressive Hint Coach (Available in Untimed Practice before revealing final answer) */}
+            {!timedEnabled && !isCurrentRevealed
+              ? (() => {
+                  const qCoach = generateQuestionHints(currentQuestion);
+                  return (
+                    <HintCoachDrawer
+                      itemKey={currentQuestion.id}
+                      title="Need a Hint? Plain-English Breakdown & 3-Step Clues"
+                      situationPlainEnglish={qCoach.situationPlainEnglish}
+                      hints={qCoach.hints}
+                      compact
+                      actions={
+                        qCoach.outlineStarter
+                          ? [
+                              {
+                                label: 'Insert Guided Answer Outline',
+                                onClick: () =>
+                                  buildOrUpdateResponse(currentQuestion, {
+                                    textAnswer: qCoach.outlineStarter,
+                                  }),
+                              },
+                            ]
+                          : []
+                      }
+                    />
+                  );
+                })()
+              : null}
 
             {/* MCQ Interaction */}
             {currentQuestion.questionType === 'mcq' && currentQuestion.options ? (

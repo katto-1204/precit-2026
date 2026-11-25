@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { DiagramWorkspace } from '@/components/labs/DiagramWorkspace';
 import { DiagramCategoryPreview } from '@/components/labs/PaletteShapeIcon';
+import { DIAGRAM_COACHING } from '@/data/learningGuides';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -116,10 +117,23 @@ export function DiagramLabPage() {
         </div>
       ) : null}
 
+      {/* Calm Beginner Quick-Start Strip */}
+      <div className="rounded-lg border border-sky-200 bg-sky-50/70 px-4 py-3 text-xs text-slate-800">
+        <p className="font-bold text-sky-900">
+          Not sure where to start? Never stare at a blank grid!
+        </p>
+        <p className="mt-0.5 text-slate-700">
+          Click <strong>Guided</strong> on any diagram card below, then click{' '}
+          <strong>Hint &amp; Guide</strong> in the top toolbar to read a plain-English explanation, unlock step-by-step hints, or click{' '}
+          <strong>Load Ready-Made Example (100%)</strong> to see a complete TOPCIT diagram first.
+        </p>
+      </div>
+
       {/* 8 Official Diagram Category Cards */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {DIAGRAM_CATEGORIES.map((cat) => {
           const savedForType = savedDiagrams.filter((d) => d.diagramType === cat.id);
+          const coach = DIAGRAM_COACHING[cat.id];
           return (
             <Card key={cat.id} className="flex flex-col">
               <CardHeader className="pb-3">
@@ -133,8 +147,8 @@ export function DiagramLabPage() {
                   <GitBranch className="h-4 w-4 text-brand-600" />
                   {cat.name}
                 </CardTitle>
-                <CardDescription className="line-clamp-2 text-xs">
-                  {cat.description}
+                <CardDescription className="line-clamp-3 text-xs">
+                  {coach ? coach.whatIsItPlainEnglish : cat.description}
                 </CardDescription>
               </CardHeader>
 

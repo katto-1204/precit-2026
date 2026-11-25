@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
   BarChart3,
@@ -21,8 +21,16 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { BLUEPRINT_2026 } from '@/domain/blueprint2026';
+import { useAppStore } from '@/stores/useAppStore';
 
 export function LandingPage() {
+  const navigate = useNavigate();
+  const startTour = useAppStore((s) => s.startTour);
+
+  function handleLaunchTour() {
+    startTour(0);
+    navigate('/dashboard');
+  }
   return (
     <div className="min-h-screen bg-white text-slate-900">
       {/* Top Navigation */}
@@ -119,6 +127,10 @@ export function LandingPage() {
                   <Compass className="h-4 w-4" />
                   Read Interactive Tutorial
                 </Link>
+              </Button>
+              <Button size="lg" variant="ghost" onClick={handleLaunchTour}>
+                <Sparkles className="h-4 w-4 text-brand-600" />
+                Take 1-Minute Guided Tour
               </Button>
             </div>
 

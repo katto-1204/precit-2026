@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { CheckCircle2, Flame, Layers, Save, ShieldAlert } from 'lucide-react';
 import { QuestionStemRenderer } from '@/components/exam/QuestionStemRenderer';
 import { DiagramWorkspace } from '@/components/labs/DiagramWorkspace';
+import { HintCoachDrawer } from '@/components/shared/HintCoachDrawer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -12,6 +13,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { getIntegratedCoach } from '@/data/learningGuides';
 import { logStudySession } from '@/db/backup';
 import { db } from '@/db/database';
 import { useLiveQuery } from '@/db/useLiveQuery';
@@ -169,6 +171,26 @@ export function IntegratedChallengesPage() {
                   prompt={activeQuestion.prompt}
                 />
               </div>
+
+              {(() => {
+                const intCoach = getIntegratedCoach(activeQuestion);
+                return (
+                  <HintCoachDrawer
+                    itemKey={activeQuestion.id}
+                    title="Overwhelmed by 80 Points? Open Plain-English Breakdown & Hints"
+                    situationPlainEnglish={intCoach.situationPlainEnglish}
+                    glossary={intCoach.glossary}
+                    hints={intCoach.hints}
+                    compact
+                    actions={[
+                      {
+                        label: 'Load Guided Fill-in-the-Blank Outline',
+                        onClick: () => setWrittenAnswer(intCoach.guidedOutlineTemplate),
+                      },
+                    ]}
+                  />
+                );
+              })()}
 
               {saveNotice ? (
                 <div role="status" className="flex items-center gap-2 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-800">

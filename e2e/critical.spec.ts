@@ -72,10 +72,13 @@ test.describe('PrepCIT Critical 2026 TOPCIT E2E Assertions', () => {
       'UI Design',
       'Use Case Diagram',
     ]) {
-      await expect(page.getByText(name)).toBeVisible();
+      await expect(page.getByRole('heading', { name, exact: true })).toBeVisible();
     }
 
-    await page.getByRole('button', { name: /Guided/i }).first().click();
+    await page.getByRole('button', { name: /^Guided$/i }).first().click();
+    await page.getByRole('button', { name: /Hint & Guide/i }).click();
+    await expect(page.getByText(/What Is a Activity Diagram/i)).toBeVisible();
+    await page.getByRole('button', { name: /Load Ready-Made Example/i }).click();
     await page.getByRole('button', { name: /Decision \/ Merge/i }).click();
     await page.getByRole('button', { name: /Toggle Properties Inspector/i }).click();
     await expect(page.getByLabel('Label')).toBeVisible();
@@ -83,7 +86,7 @@ test.describe('PrepCIT Critical 2026 TOPCIT E2E Assertions', () => {
     await expect(page.getByRole('status')).toContainText('Saved');
   });
 
-  test('SQL & Database Laboratory runs live sql.js SQLite WASM query and awards full credit', async ({
+  test('SQL & Database Laboratory runs live sql.js SQLite WASM query, SQL 101 warm-ups, and awards full credit', async ({
     page,
   }) => {
     await page.goto('/coding-lab');
@@ -91,10 +94,17 @@ test.describe('PrepCIT Critical 2026 TOPCIT E2E Assertions', () => {
 
     await page.getByRole('tab', { name: /SQL & Database Lab/i }).click();
     await expect(page.getByText('Live Table Schema Explorer')).toBeVisible();
+    await expect(page.getByText(/SQL 101 Interactive Practice Sandbox/i)).toBeVisible();
 
     await page.getByRole('button', { name: /Grade Query/i }).click();
     await expect(page.getByRole('status')).toContainText('Exact result-set match');
     await expect(page.getByText('50 / 50 pts')).toBeVisible();
     await expect(page.getByText('Computer Science')).toBeVisible();
+
+    // Verify Guided Tour can be opened from the top bar
+    await page.getByRole('button', { name: /Guided Tour/i }).click();
+    await expect(page.getByRole('dialog', { name: /PrepCIT Interactive Guided Tour/i })).toBeVisible();
+    await page.getByRole('button', { name: /Next Stop/i }).click();
+    await expect(page.getByText(/Study Library: Plain-English Concepts/i)).toBeVisible();
   });
 });

@@ -20,6 +20,7 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
+import { GuidedTourModal } from '@/components/shared/GuidedTourModal';
 import { BLUEPRINT_2026, getCompetencyLevel } from '@/domain/blueprint2026';
 import { db } from '@/db/database';
 import { useLiveQuery } from '@/db/useLiveQuery';
@@ -51,7 +52,7 @@ const NAV_ITEMS: NavItem[] = [
 
 export function AppShell() {
   const location = useLocation();
-  const { mobileNavOpen, setMobileNavOpen } = useAppStore();
+  const { mobileNavOpen, setMobileNavOpen, startTour } = useAppStore();
   const [isOnline, setIsOnline] = useState<boolean>(
     typeof navigator !== 'undefined' ? navigator.onLine : true,
   );
@@ -216,7 +217,15 @@ export function AppShell() {
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => startTour(0)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-brand-200 bg-brand-50 px-3 py-1 text-[11px] font-semibold text-brand-700 hover:bg-brand-100 transition-colors cursor-pointer"
+            >
+              <Compass className="h-3.5 w-3.5" />
+              <span>Guided Tour</span>
+            </button>
             <div
               className={cn(
                 'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium',
@@ -235,6 +244,8 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+
+      <GuidedTourModal />
     </div>
   );
 }

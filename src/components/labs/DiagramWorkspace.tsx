@@ -33,6 +33,7 @@ import {
   Image as ImageIcon,
   Layers,
   LayoutGrid,
+  Lightbulb,
   Maximize2,
   MousePointer,
   Move,
@@ -51,9 +52,11 @@ import {
 } from 'lucide-react';
 import { DiagramNodeRenderer } from '@/components/labs/DiagramNodeRenderer';
 import { PaletteShapeIcon } from '@/components/labs/PaletteShapeIcon';
+import { HintCoachDrawer } from '@/components/shared/HintCoachDrawer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DIAGRAM_COACHING } from '@/data/learningGuides';
 import { db } from '@/db/database';
 import {
   CONNECTOR_META,
@@ -158,6 +161,8 @@ function DiagramCanvasInner({
   const [toolMode, setToolMode] = useState<'select' | 'pan'>('select');
   const [activeConnector, setActiveConnector] = useState<ConnectorStyle>(spec.defaultConnector);
   const [paletteOpen, setPaletteOpen] = useState(true);
+  const [hintPanelOpen, setHintPanelOpen] = useState(false);
+  const diagramCoach = DIAGRAM_COACHING[diagramType];
   const [inspectorOpen, setInspectorOpen] = useState(false); // Collapsed by default like TOPCIT IBT editor
   const [inspectorTab, setInspectorTab] = useState<'text' | 'style' | 'arrange'>('text');
   const [paletteSearch, setPaletteSearch] = useState('');
@@ -536,6 +541,17 @@ function DiagramCanvasInner({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          {!embedded && mode !== 'timed' && diagramCoach ? (
+            <Button
+              size="sm"
+              variant={hintPanelOpen ? 'secondary' : 'outline'}
+              className="h-7 px-2.5 text-xs border-sky-300 bg-sky-50 text-sky-900 hover:bg-sky-100"
+              onClick={() => setHintPanelOpen((o) => !o)}
+            >
+              <Lightbulb className="h-3.5 w-3.5 text-sky-600" />
+              Hint &amp; Guide
+            </Button>
+          ) : null}
           <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs" onClick={() => setEvaluation(evaluateDiagramGraph(diagramType, nodes, edges, 50))}>
             <CheckCircle2 className="h-3.5 w-3.5 text-brand-600" />
             Validate
@@ -688,6 +704,51 @@ function DiagramCanvasInner({
             <RotateCcw className="h-3 w-3" />
             Reset Starter
           </Button>
+        </div>
+      ) : null}
+
+      {/* Collapsible Plain-English Diagram Guide, Progressive Hints & Ready-Made Worked Example */}
+      {!embedded && mode !== 'timed' && hintPanelOpen && diagramCoach ? (
+        <div className="border-b border-sky-200 bg-sky-50/40 px-3 py-2.5">
+          <HintCoachDrawer
+            itemKey={diagramType}
+            defaultOpen
+            compact
+            title={`What Is a ${spec.name}? & Step-by-Step Guide`}
+            situationPlainEnglish={`${diagramCoach.whatIsItPlainEnglish} ${diagramCoach.situationPlainEnglish}`}
+            extraNote={`When TOPCIT asks for this: ${diagramCoach.whenTopcitAsks}`}
+            glossary={diagramCoach.glossary}
+            hints={diagramCoach.hints}
+            actions={[
+              {
+                label: 'Load Ready-Made Example (100%)',
+                onClick: () => {
+                  pushHistory(nodes, edges);
+                  setNodes(diagramCoach.workedNodes);
+                  setEdges(diagramCoach.workedEdges);
+                  setSaveMessage(
+                    `Loaded ready-made ${spec.name} example! Explore the shapes & connectors, or click Validate to see how it scores 100%.`,
+                  );
+                  window.setTimeout(() => reactFlow.fitView({ padding: 0.18 }), 60);
+                },
+              },
+              {
+                label: 'Load Guided Starter',
+                onClick: () => {
+                  pushHistory(nodes, edges);
+                  setNodes(
+                    spec.guidedPrompt.starterNodes.map((n) => ({
+                      ...n,
+                      style: { width: n.data.width, height: n.data.height },
+                    })),
+                  );
+                  setEdges(spec.guidedPrompt.starterEdges);
+                  setSaveMessage(`Loaded guided starter for ${spec.name}.`);
+                  window.setTimeout(() => reactFlow.fitView({ padding: 0.18 }), 60);
+                },
+              },
+            ]}
+          />
         </div>
       ) : null}
 

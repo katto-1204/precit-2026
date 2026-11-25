@@ -1,17 +1,21 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import {
   AlertTriangle,
+  BookOpen,
   Bug,
   CheckCircle2,
   Clock,
   Code2,
   Database,
+  Eye,
+  GraduationCap,
   Play,
   RotateCcw,
   Send,
   Terminal,
   XCircle,
 } from 'lucide-react';
+import { HintCoachDrawer } from '@/components/shared/HintCoachDrawer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,6 +31,14 @@ import {
   SQL_CHALLENGES,
   type CompilerLanguage,
 } from '@/data/labChallenges';
+import {
+  CODING_CHALLENGE_COACHING,
+  CODING_TUTORIAL_RECIPES,
+  SQL_CHALLENGE_COACHING,
+  SQL_TUTORIAL_RECIPES,
+  type CodingTutorialRecipe,
+  type SqlTutorialRecipe,
+} from '@/data/learningGuides';
 import { logStudySession } from '@/db/backup';
 import { db } from '@/db/database';
 import { updateTopicMastery } from '@/domain/learningEngine';
@@ -77,6 +89,13 @@ export function CodingLabPage() {
   const [sqlGrade, setSqlGrade] = useState<SqlGradeResult | null>(null);
   const [sqlHistory, setSqlHistory] = useState<string[]>([]);
   const [runningSql, setRunningSql] = useState(false);
+  const [showPythonTutorial, setShowPythonTutorial] = useState(false);
+  const [activePyRecipe, setActivePyRecipe] = useState<CodingTutorialRecipe | null>(null);
+  const [showSqlTutorial, setShowSqlTutorial] = useState(true);
+  const [activeSqlRecipe, setActiveSqlRecipe] = useState<SqlTutorialRecipe | null>(null);
+
+  const codingCoach = CODING_CHALLENGE_COACHING[activeChallenge.id];
+  const sqlCoach = SQL_CHALLENGE_COACHING[activeSqlChallenge.id];
 
   useEffect(() => {
     setCode(activeChallenge.starterCode[language]);
@@ -137,16 +156,51 @@ export function CodingLabPage() {
     }
   }
 
-  async function handleRunSql() {
+  async function handleRunSql(overrideQuery?: string) {
+    const queryToRun = overrideQuery ?? sqlCode;
     setRunningSql(true);
     setSqlGrade(null);
     try {
-      const res = await executeSqlQuery(activeSqlChallenge.schemaSql, sqlCode);
+      const res = await executeSqlQuery(activeSqlChallenge.schemaSql, queryToRun);
       setSqlRunResult(res);
-      setSqlHistory((prev) => [sqlCode.trim(), ...prev.slice(0, 4)]);
+      setSqlHistory((prev) => [queryToRun.trim(), ...prev.slice(0, 4)]);
     } finally {
       setRunningSql(false);
     }
+  }
+
+  async function handleLoadSqlRecipe(recipe: SqlTutorialRecipe) {
+    setActiveSqlRecipe(recipe);
+    if (recipe.compatibleChallengeId !== selectedSqlId) {
+      setSelectedSqlId(recipe.compatibleChallengeId);
+    }
+    const targetChallenge =
+      SQL_CHALLENGES.find((c) => c.id === recipe.compatibleChallengeId) ?? activeSqlChallenge;
+    setSqlCode(recipe.sql);
+    setSqlGrade(null);
+    setRunningSql(true);
+    try {
+      const res = await executeSqlQuery(targetChallenge.schemaSql, recipe.sql);
+      setSqlRunResult(res);
+    } finally {
+      setRunningSql(false);
+    }
+  }
+
+  async function handlePeekTable(tableName: string) {
+    const peekQuery = `-- Peeking inside "${tableName}" so you can see the actual rows!\nSELECT * FROM ${tableName} LIMIT 10;`;
+    setSqlCode(peekQuery);
+    setActiveSqlRecipe(null);
+    await handleRunSql(peekQuery);
+  }
+
+  function handleLoadPythonRecipe(recipe: CodingTutorialRecipe) {
+    setLanguage('python');
+    setActivePyRecipe(recipe);
+    setCode(recipe.pythonCode);
+    setCustomStdin(recipe.sampleStdin);
+    setExecResult(null);
+    setGradeSummary(null);
   }
 
   async function handleSubmitSql() {
@@ -238,7 +292,10 @@ export function CodingLabPage() {
             <select
               aria-label="Select coding challenge"
               value={selectedChallengeId}
-              onChange={(e) => setSelectedChallengeId(e.target.value)}
+              onChange={(e) => {
+                setSelectedChallengeId(e.target.value);
+                setActivePyRecipe(null);
+              }}
               className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-800"
             >
               {CODING_CHALLENGES.map((ch) => (
@@ -248,6 +305,92 @@ export function CodingLabPage() {
               ))}
             </select>
           </div>
+
+          {/* Ready-Made Python 101 Warm-Up Tutorial Strip */}
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <GraduationCap className="h-4 w-4 text-emerald-700" />
+                <span className="text-xs font-bold text-emerald-950">
+                  New to Python Coding Tasks? Try a 1-Click Warm-Up Lesson
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-emerald-800"
+                onClick={() => setShowPythonTutorial((v) => !v)}
+              >
+                {showPythonTutorial ? 'Hide Warm-Ups' : 'Open Python 101 Warm-Ups (3)'}
+              </Button>
+            </div>
+            {showPythonTutorial ? (
+              <div className="mt-3 space-y-2.5">
+                <div className="grid gap-2 md:grid-cols-3">
+                  {CODING_TUTORIAL_RECIPES.map((rec) => {
+                    const active = activePyRecipe?.id === rec.id;
+                    return (
+                      <button
+                        key={rec.id}
+                        type="button"
+                        onClick={() => handleLoadPythonRecipe(rec)}
+                        className={`rounded-md border p-2.5 text-left transition-colors cursor-pointer ${
+                          active
+                            ? 'border-emerald-600 bg-white shadow-2xs'
+                            : 'border-emerald-200 bg-white/80 hover:bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="text-xs font-semibold text-slate-900">{rec.title}</span>
+                          <Badge variant="success" className="text-[10px]">
+                            {rec.badge}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-[11px] leading-snug text-slate-600">
+                          {rec.plainEnglish}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {activePyRecipe ? (
+                  <p className="text-[11px] text-emerald-900">
+                    Loaded <strong>{activePyRecipe.title}</strong> into the Python editor — click{' '}
+                    <strong>Run Code</strong> to see it execute, or click <strong>Reset Starter</strong>{' '}
+                    to jump back to the graded challenge!
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Plain-English Situation Coach & Progressive Hints for Active Coding Challenge */}
+          {codingCoach ? (
+            <HintCoachDrawer
+              itemKey={activeChallenge.id}
+              title="What Does This Coding Problem Mean? & 3-Step Hints"
+              situationPlainEnglish={codingCoach.situationPlainEnglish}
+              extraNote={`Walkthrough of Sample #1:\n${codingCoach.sampleWalkthrough}`}
+              glossary={codingCoach.glossary}
+              hints={codingCoach.hints}
+              actions={[
+                {
+                  label: 'Load Guided Python Scaffold',
+                  onClick: () => {
+                    setLanguage('python');
+                    setCode(codingCoach.guidedFillBlankPython);
+                  },
+                },
+                {
+                  label: 'Load Reference Solution (Python)',
+                  onClick: () => {
+                    setLanguage('python');
+                    setCode(activeChallenge.referenceSolutionPython);
+                  },
+                },
+              ]}
+            />
+          ) : null}
 
           {/* IDE Split Grid */}
           <div className="grid gap-4 lg:grid-cols-12">
@@ -487,7 +630,10 @@ export function CodingLabPage() {
             <select
               aria-label="Select SQL challenge"
               value={selectedSqlId}
-              onChange={(e) => setSelectedSqlId(e.target.value)}
+              onChange={(e) => {
+                setSelectedSqlId(e.target.value);
+                setActiveSqlRecipe(null);
+              }}
               className="h-8 rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-800"
             >
               {SQL_CHALLENGES.map((ch) => (
@@ -497,6 +643,91 @@ export function CodingLabPage() {
               ))}
             </select>
           </div>
+
+          {/* Ready-Made SQL 101 Interactive Tutorial Sandbox */}
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <BookOpen className="h-4 w-4 text-emerald-700" />
+                <span className="text-xs font-bold text-emerald-950">
+                  SQL 101 Interactive Practice Sandbox — Click Any Step to Run Live!
+                </span>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-emerald-800"
+                onClick={() => setShowSqlTutorial((v) => !v)}
+              >
+                {showSqlTutorial ? 'Hide SQL 101' : 'Show SQL 101 (5 Lessons)'}
+              </Button>
+            </div>
+            {showSqlTutorial ? (
+              <div className="mt-3 space-y-2.5">
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                  {SQL_TUTORIAL_RECIPES.map((rec) => {
+                    const active = activeSqlRecipe?.id === rec.id;
+                    return (
+                      <button
+                        key={rec.id}
+                        type="button"
+                        onClick={() => void handleLoadSqlRecipe(rec)}
+                        className={`rounded-md border p-2.5 text-left transition-colors cursor-pointer ${
+                          active
+                            ? 'border-emerald-600 bg-white shadow-2xs'
+                            : 'border-emerald-200 bg-white/85 hover:bg-white'
+                        }`}
+                      >
+                        <Badge variant="success" className="text-[9px]">
+                          {rec.badge}
+                        </Badge>
+                        <p className="mt-1 text-xs font-semibold text-slate-900">{rec.title}</p>
+                        <p className="mt-1 text-[11px] leading-snug text-slate-600">
+                          {rec.plainEnglish}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+                {activeSqlRecipe ? (
+                  <div className="rounded-md border border-emerald-300 bg-white px-3 py-2 text-xs text-slate-800">
+                    <span className="font-bold text-emerald-800">What to watch for: </span>
+                    {activeSqlRecipe.whatToWatchFor}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Plain-English SQL Situation Coach & Progressive Hints */}
+          {sqlCoach ? (
+            <HintCoachDrawer
+              itemKey={activeSqlChallenge.id}
+              title="What Does This SQL Situation Mean? & 3-Step Hints"
+              situationPlainEnglish={sqlCoach.situationPlainEnglish}
+              extraNote={`What your output table needs to look like:\n${sqlCoach.outputExplained}`}
+              glossary={sqlCoach.glossary}
+              hints={sqlCoach.hints}
+              actions={[
+                {
+                  label: 'Load Fill-in-the-Blank Practice',
+                  onClick: () => {
+                    setActiveSqlRecipe(null);
+                    setSqlCode(sqlCoach.guidedFillBlankSql);
+                    setSqlGrade(null);
+                  },
+                },
+                {
+                  label: 'Load Commented Worked Example',
+                  onClick: () => {
+                    setActiveSqlRecipe(null);
+                    setSqlCode(sqlCoach.workedExampleSql);
+                    setSqlGrade(null);
+                  },
+                },
+              ]}
+            />
+          ) : null}
 
           <div className="grid gap-4 lg:grid-cols-12">
             {/* Left Schema Explorer & Task */}
@@ -509,15 +740,28 @@ export function CodingLabPage() {
               </CardHeader>
               <CardContent className="space-y-4 text-xs">
                 <div>
-                  <h3 className="mb-2 font-semibold text-slate-900">Live Table Schema Explorer</h3>
+                  <div className="mb-2 flex items-center justify-between">
+                    <h3 className="font-semibold text-slate-900">Live Table Schema Explorer</h3>
+                    <span className="text-[10px] text-slate-500">Click Peek to inspect live rows</span>
+                  </div>
                   <div className="space-y-2">
                     {sqlTables.map((t) => (
                       <div key={t.tableName} className="rounded border border-slate-200 bg-slate-50 p-2.5">
-                        <div className="flex items-center justify-between font-mono font-bold text-slate-900">
+                        <div className="flex items-center justify-between gap-2 font-mono font-bold text-slate-900">
                           <span>{t.tableName}</span>
-                          <span className="text-[10px] font-normal text-slate-500">
-                            {t.rowCount} rows
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-normal text-slate-500">
+                              {t.rowCount} rows
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => void handlePeekTable(t.tableName)}
+                              className="inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 font-sans text-[10px] font-semibold text-slate-700 hover:bg-slate-100 cursor-pointer"
+                            >
+                              <Eye className="h-3 w-3 text-sky-600" />
+                              Peek Rows
+                            </button>
+                          </div>
                         </div>
                         <ul className="mt-1 space-y-0.5 font-mono text-[11px] text-slate-600">
                           {t.columns.map((c) => (
@@ -532,7 +776,7 @@ export function CodingLabPage() {
                   </div>
                 </div>
                 <p className="rounded border border-amber-200 bg-amber-50 p-2.5 text-[11px] text-amber-900">
-                  <strong>Tip:</strong> {activeSqlChallenge.hint}
+                  <strong>Quick Tip:</strong> {activeSqlChallenge.hint}
                 </p>
               </CardContent>
             </Card>
