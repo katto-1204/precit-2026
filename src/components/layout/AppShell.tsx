@@ -7,6 +7,7 @@ import {
   CalendarDays,
   ClipboardCheck,
   Code2,
+  Compass,
   Flame,
   GitBranch,
   LayoutDashboard,
@@ -33,7 +34,8 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/guide', label: 'Tutorial & Guide', icon: Compass, badge: 'Start' },
   { to: '/study-library', label: 'Study Library', icon: BookOpen },
   { to: '/practice', label: 'Practice Questions', icon: Target },
   { to: '/mock-exam', label: 'Full Mock Exam', icon: ClipboardCheck, badge: '75Q' },
@@ -78,7 +80,7 @@ export function AppShell() {
     <div className="flex min-h-screen bg-slate-50/70 text-slate-900">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:fixed lg:inset-y-0 border-r border-slate-200 bg-white">
-        <div className="flex h-16 items-center gap-3 border-b border-slate-200 px-5">
+        <NavLink to="/" className="flex h-16 items-center gap-3 border-b border-slate-200 px-5 hover:bg-slate-50/80 transition-colors">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-brand-600 font-mono text-sm font-bold text-white">
             PC
           </div>
@@ -91,7 +93,7 @@ export function AppShell() {
             </div>
             <p className="truncate text-[11px] text-slate-500">TOPCIT-Style Simulator</p>
           </div>
-        </div>
+        </NavLink>
 
         <nav aria-label="Primary Navigation" className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
           {NAV_ITEMS.map((item) => {

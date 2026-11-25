@@ -1,10 +1,13 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('PrepCIT Critical 2026 TOPCIT E2E Assertions', () => {
-  test('Dashboard displays verified 2025 baseline (197/1000, Level 2) and 4 official 2026 domains', async ({
+  test('Landing Page, Tutorial Guide, and Dashboard display verified 2025 baseline (197/1000, Level 2) and 4 official 2026 domains', async ({
     page,
   }) => {
     await page.goto('/');
+    await expect(page.getByText(/Train on real/i)).toBeVisible();
+    await page.getByRole('link', { name: /Enter Study Dashboard/i }).click();
+
     await expect(page.getByText('Performance & Study Dashboard')).toBeVisible();
     await expect(page.getByText('197', { exact: true })).toBeVisible();
     await expect(page.getByText(/Level 2 — Advanced Beginner/i)).toBeVisible();
@@ -14,6 +17,9 @@ test.describe('PrepCIT Critical 2026 TOPCIT E2E Assertions', () => {
     await expect(page.getByText('265 pts', { exact: true })).toBeVisible();
     await expect(page.getByText('235 pts', { exact: true })).toBeVisible();
     await expect(page.getByText('135 pts', { exact: true })).toBeVisible();
+
+    await page.goto('/guide');
+    await expect(page.getByText('Interactive Tutorial & TOPCIT 2026 Exam Guide')).toBeVisible();
   });
 
   test('Full 2026 Mock Exam: 75 items, reload-resilient timer/answers, zero answer leakage, offline continuity', async ({

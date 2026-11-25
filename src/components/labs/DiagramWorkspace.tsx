@@ -50,6 +50,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { DiagramNodeRenderer } from '@/components/labs/DiagramNodeRenderer';
+import { PaletteShapeIcon } from '@/components/labs/PaletteShapeIcon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -70,6 +71,9 @@ import type { SavedDiagram } from '@/domain/schemas';
 const NODE_TYPES = {
   prepcitNode: DiagramNodeRenderer,
 };
+
+const QUICK_FILL_SWATCHES = ['#ffffff', '#f8fafc', '#fef2f2', '#eff6ff', '#ecfdf5', '#fffbeb', '#0f172a', '#c81e1e'];
+const QUICK_STROKE_SWATCHES = ['#0f172a', '#334155', '#c81e1e', '#0284c7', '#059669', '#d97706', '#64748b'];
 
 interface DiagramWorkspaceProps {
   diagramType: DiagramType;
@@ -119,8 +123,6 @@ function DiagramCanvasInner({
   const reactFlow = useReactFlow();
   const rootContainerRef = useRef<HTMLDivElement>(null);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
-  const [clipboardNodes, setClipboardNodes] = useState<Node<DiagramNodeData>[]>([]);
-  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
 
   const initialGraph = useMemo<GraphSnapshot>(() => {
     if (initialSaved) {
@@ -130,7 +132,7 @@ function DiagramCanvasInner({
           edges: JSON.parse(initialSaved.edgesJson) as Edge[],
         };
       } catch {
-        // Fallback to starter
+        // Fallback
       }
     }
     if (mode === 'guided' || mode === 'timed') {
@@ -156,13 +158,15 @@ function DiagramCanvasInner({
   const [toolMode, setToolMode] = useState<'select' | 'pan'>('select');
   const [activeConnector, setActiveConnector] = useState<ConnectorStyle>(spec.defaultConnector);
   const [paletteOpen, setPaletteOpen] = useState(true);
-  const [inspectorOpen, setInspectorOpen] = useState(false); // Collapsed by default matching official TOPCIT editor!
+  const [inspectorOpen, setInspectorOpen] = useState(false); // Collapsed by default like TOPCIT IBT editor
+  const [inspectorTab, setInspectorTab] = useState<'text' | 'style' | 'arrange'>('text');
   const [paletteSearch, setPaletteSearch] = useState('');
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [evaluation, setEvaluation] = useState<DiagramEvaluationResult | null>(null);
   const [timedSeconds, setTimedSeconds] = useState<number | null>(mode === 'timed' ? 1200 : null);
+  const [clipboardNodes, setClipboardNodes] = useState<Node<DiagramNodeData>[]>([]);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
 
-  // Undo/Redo history stack
   const [past, setPast] = useState<GraphSnapshot[]>([]);
   const [future, setFuture] = useState<GraphSnapshot[]>([]);
 
@@ -174,14 +178,12 @@ function DiagramCanvasInner({
     [],
   );
 
-  // Notify embedded parent (e.g. CBT exam) whenever graph changes
   useEffect(() => {
     if (onChangeGraphJson) {
       onChangeGraphJson(JSON.stringify({ diagramType, nodes, edges }));
     }
   }, [diagramType, nodes, edges, onChangeGraphJson]);
 
-  // Timed challenge countdown
   useEffect(() => {
     if (timedSeconds === null || timedSeconds <= 0) return;
     const t = window.setInterval(() => {
@@ -215,7 +217,7 @@ function DiagramCanvasInner({
     (shape: PaletteShapeDef, position?: { x: number; y: number }) => {
       pushHistory(nodes, edges);
       const offset = (nodes.length % 6) * 28;
-      const pos = position ?? { x: 140 + offset, y: 90 + offset };
+      const pos = position ?? { x: 160 + offset, y: 90 + offset };
       const newNode: Node<DiagramNodeData> = {
         id: `n-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
         type: 'prepcitNode',
@@ -287,33 +289,6 @@ function DiagramCanvasInner({
     setNodes((nds) => [...nds.map((n) => ({ ...n, selected: false })), ...pasted]);
   }, [clipboardNodes, edges, nodes, pushHistory, setNodes]);
 
-  const handleDistributeHorizontal = useCallback(() => {
-    const sel = nodes.filter((n) => n.selected);
-    const targets = sel.length >= 3 ? sel : nodes;
-    if (targets.length < 3) return;
-    pushHistory(nodes, edges);
-    const sorted = [...targets].sort((a, b) => a.position.x - b.position.x);
-    const minX = sorted[0].position.x;
-    const maxX = sorted[sorted.length - 1].position.x;
-    const step = (maxX - minX) / (sorted.length - 1);
-    const posMap = new Map(sorted.map((n, i) => [n.id, Math.round(minX + step * i)]));
-    setNodes((nds) =>
-      nds.map((n) =>
-        posMap.has(n.id) ? { ...n, position: { ...n.position, x: posMap.get(n.id)! } } : n,
-      ),
-    );
-  }, [edges, nodes, pushHistory, setNodes]);
-
-  const handleToggleFullscreen = useCallback(() => {
-    const el = rootContainerRef.current;
-    if (!el) return;
-    if (document.fullscreenElement) {
-      void document.exitFullscreen();
-    } else if (el.requestFullscreen) {
-      void el.requestFullscreen();
-    }
-  }, []);
-
   const handleDuplicateSelected = useCallback(() => {
     const selected = nodes.filter((n) => n.selected);
     if (selected.length === 0) return;
@@ -360,6 +335,23 @@ function DiagramCanvasInner({
     [edges, nodes, pushHistory, setNodes],
   );
 
+  const handleDistributeHorizontal = useCallback(() => {
+    const sel = nodes.filter((n) => n.selected);
+    const targets = sel.length >= 3 ? sel : nodes;
+    if (targets.length < 3) return;
+    pushHistory(nodes, edges);
+    const sorted = [...targets].sort((a, b) => a.position.x - b.position.x);
+    const minX = sorted[0].position.x;
+    const maxX = sorted[sorted.length - 1].position.x;
+    const step = (maxX - minX) / (sorted.length - 1);
+    const posMap = new Map(sorted.map((n, i) => [n.id, Math.round(minX + step * i)]));
+    setNodes((nds) =>
+      nds.map((n) =>
+        posMap.has(n.id) ? { ...n, position: { ...n.position, x: posMap.get(n.id)! } } : n,
+      ),
+    );
+  }, [edges, nodes, pushHistory, setNodes]);
+
   const handleAutoLayout = useCallback(() => {
     if (nodes.length === 0) return;
     pushHistory(nodes, edges);
@@ -375,6 +367,16 @@ function DiagramCanvasInner({
     );
     window.setTimeout(() => reactFlow.fitView({ padding: 0.15 }), 50);
   }, [edges, nodes, pushHistory, reactFlow, setNodes]);
+
+  const handleToggleFullscreen = useCallback(() => {
+    const el = rootContainerRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen();
+    } else if (el.requestFullscreen) {
+      void el.requestFullscreen();
+    }
+  }, []);
 
   const updateSelectedNodeData = useCallback(
     (patch: Partial<DiagramNodeData>) => {
@@ -469,17 +471,12 @@ function DiagramCanvasInner({
     img.src = url;
   }
 
-  function handleValidateDiagram() {
-    setEvaluation(evaluateDiagramGraph(diagramType, nodes, edges, 50));
-  }
-
   const filteredPalette = spec.palette.filter((p) => {
     const q = paletteSearch.trim().toLowerCase();
     if (!q) return true;
     return p.label.toLowerCase().includes(q) || p.category.toLowerCase().includes(q);
   });
 
-  // Keyboard shortcuts for Undo / Redo / Delete
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
@@ -508,113 +505,154 @@ function DiagramCanvasInner({
     <div
       ref={rootContainerRef}
       onClick={() => setContextMenu(null)}
-      className={`flex flex-col overflow-hidden rounded-lg border border-slate-200 bg-white ${
-        embedded ? 'h-[580px]' : 'h-[calc(100vh-110px)] min-h-[620px]'
+      className={`prepcit-ibt-canvas flex flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-xs ${
+        embedded ? 'h-[580px]' : 'h-[calc(100vh-110px)] min-h-[640px]'
       }`}
     >
-      {/* Top Header + Horizontal Editing Toolbar (Official TOPCIT Layout) */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50 px-3 py-2">
+      {/* Row 1: Crisp Official TOPCIT IBT Document Header */}
+      <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-3 py-2">
         <div className="flex items-center gap-2 min-w-0">
           {onBack ? (
-            <Button variant="ghost" size="sm" onClick={onBack}>
-              <ArrowLeft className="h-4 w-4" />
+            <Button variant="ghost" size="sm" onClick={onBack} className="h-7 px-2 text-xs">
+              <ArrowLeft className="h-3.5 w-3.5" />
               Categories
             </Button>
           ) : null}
-          <Badge variant="brand">{spec.shortName}</Badge>
+          <Badge variant="brand" className="shrink-0">
+            IBT · {spec.shortName}
+          </Badge>
           <Input
             aria-label="Diagram title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="h-7 w-48 text-xs font-semibold sm:w-64"
+            className="h-7 w-44 text-xs font-semibold sm:w-64"
           />
           {timedSeconds !== null ? (
-            <Badge variant={timedSeconds < 180 ? 'danger' : 'warning'} className="font-mono">
+            <Badge variant={timedSeconds < 180 ? 'danger' : 'warning'} className="font-mono shrink-0">
               <Clock className="h-3 w-3" />
               {Math.floor(timedSeconds / 60)}:{String(timedSeconds % 60).padStart(2, '0')}
             </Badge>
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1">
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs" onClick={() => setEvaluation(evaluateDiagramGraph(diagramType, nodes, edges, 50))}>
+            <CheckCircle2 className="h-3.5 w-3.5 text-brand-600" />
+            Validate
+          </Button>
+          <Button size="sm" variant="primary" className="h-7 px-2.5 text-xs" onClick={() => void handleSaveToDb()}>
+            <Save className="h-3.5 w-3.5" />
+            Save
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" title="Export SVG" aria-label="Export SVG" onClick={handleExportSvg}>
+            <Download className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">SVG</span>
+          </Button>
+          <Button size="sm" variant="outline" className="h-7 px-2 text-xs" title="Export PNG" aria-label="Export PNG" onClick={handleExportPng}>
+            <ImageIcon className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">PNG</span>
+          </Button>
+          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" title="Export JSON" aria-label="Export JSON" onClick={handleExportJson}>
+            <FileJson className="h-3.5 w-3.5" />
+          </Button>
           <Button
             size="sm"
-            variant={toolMode === 'select' ? 'secondary' : 'ghost'}
+            variant={inspectorOpen ? 'secondary' : 'outline'}
+            className="h-7 px-2.5 text-xs"
+            title="Toggle Properties Inspector"
+            aria-label="Toggle Properties Inspector"
+            onClick={() => setInspectorOpen((o) => !o)}
+          >
+            {inspectorOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
+            Inspector
+          </Button>
+        </div>
+      </div>
+
+      {/* Row 2: Compact Single-Row Horizontal IBT Editing Toolbar */}
+      <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-100/90 px-2.5 py-1.5">
+        <div className="flex items-center rounded border border-slate-300 bg-white p-0.5">
+          <button
+            type="button"
             title="Select Tool"
             aria-label="Select Tool"
             onClick={() => setToolMode('select')}
+            className={`rounded px-1.5 py-1 cursor-pointer ${toolMode === 'select' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
           >
             <MousePointer className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            size="sm"
-            variant={toolMode === 'pan' ? 'secondary' : 'ghost'}
+          </button>
+          <button
+            type="button"
             title="Pan Tool"
             aria-label="Pan Tool"
             onClick={() => setToolMode('pan')}
+            className={`rounded px-1.5 py-1 cursor-pointer ${toolMode === 'pan' ? 'bg-slate-900 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
           >
             <Move className="h-3.5 w-3.5" />
-          </Button>
+          </button>
+        </div>
 
-          <div className="mx-1 h-5 w-px bg-slate-200" />
+        <div className="mx-0.5 h-5 w-px shrink-0 bg-slate-300" />
 
-          <Button size="sm" variant="ghost" title="Zoom In" aria-label="Zoom In" onClick={() => reactFlow.zoomIn()}>
-            <ZoomIn className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" title="Zoom Out" aria-label="Zoom Out" onClick={() => reactFlow.zoomOut()}>
-            <ZoomOut className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" title="Reset Zoom (100%)" aria-label="Reset Zoom" onClick={() => reactFlow.zoomTo(1)}>
-            <span className="font-mono text-[10px]">100%</span>
-          </Button>
-          <Button size="sm" variant="ghost" title="Fit Diagram" aria-label="Fit Diagram" onClick={() => reactFlow.fitView({ padding: 0.15 })}>
-            <Maximize2 className="h-3.5 w-3.5" />
-          </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Zoom In" aria-label="Zoom In" onClick={() => reactFlow.zoomIn()}>
+          <ZoomIn className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Zoom Out" aria-label="Zoom Out" onClick={() => reactFlow.zoomOut()}>
+          <ZoomOut className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 px-1.5 font-mono text-[10px]" title="Reset Zoom (100%)" aria-label="Reset Zoom" onClick={() => reactFlow.zoomTo(1)}>
+          100%
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Fit Diagram" aria-label="Fit Diagram" onClick={() => reactFlow.fitView({ padding: 0.15 })}>
+          <Maximize2 className="h-3.5 w-3.5" />
+        </Button>
 
-          <div className="mx-1 h-5 w-px bg-slate-200" />
+        <div className="mx-0.5 h-5 w-px shrink-0 bg-slate-300" />
 
-          <Button size="sm" variant="ghost" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={past.length === 0} onClick={handleUndo}>
-            <Undo2 className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={future.length === 0} onClick={handleRedo}>
-            <Redo2 className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" title="Copy (Ctrl+C)" aria-label="Copy" disabled={!selectedNode} onClick={handleCopySelected}>
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" title="Paste (Ctrl+V)" aria-label="Paste" disabled={clipboardNodes.length === 0} onClick={handlePasteClipboard}>
-            <ClipboardPaste className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" title="Delete Selected" aria-label="Delete" disabled={!selectedNode && !selectedEdge} onClick={handleDeleteSelected}>
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={past.length === 0} onClick={handleUndo}>
+          <Undo2 className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={future.length === 0} onClick={handleRedo}>
+          <Redo2 className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Copy (Ctrl+C)" aria-label="Copy" disabled={!selectedNode} onClick={handleCopySelected}>
+          <Copy className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Paste (Ctrl+V)" aria-label="Paste" disabled={clipboardNodes.length === 0} onClick={handlePasteClipboard}>
+          <ClipboardPaste className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Delete Selected" aria-label="Delete" disabled={!selectedNode && !selectedEdge} onClick={handleDeleteSelected}>
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
 
-          <div className="mx-1 h-5 w-px bg-slate-200" />
+        <div className="mx-0.5 h-5 w-px shrink-0 bg-slate-300" />
 
-          <Button size="sm" variant="ghost" title="Bring Forward" aria-label="Bring Forward" disabled={!selectedNode} onClick={() => handleLayerOrder('front')}>
-            <ArrowUpToLine className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" title="Send Backward" aria-label="Send Backward" disabled={!selectedNode} onClick={() => handleLayerOrder('back')}>
-            <ArrowDownToLine className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" title="Align Left" aria-label="Align Left" onClick={() => handleAlign('left')}>
-            <AlignStartHorizontal className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" title="Align Center" aria-label="Align Center" onClick={() => handleAlign('center')}>
-            <AlignCenterHorizontal className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" title="Distribute Horizontally" aria-label="Distribute Horizontally" onClick={handleDistributeHorizontal}>
-            <AlignHorizontalDistributeCenter className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" title="Auto Layout" aria-label="Auto Layout" onClick={handleAutoLayout}>
-            <LayoutGrid className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="sm" variant="ghost" title="Fullscreen" aria-label="Toggle Fullscreen" onClick={handleToggleFullscreen}>
-            <Expand className="h-3.5 w-3.5" />
-          </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Bring Forward" aria-label="Bring Forward" disabled={!selectedNode} onClick={() => handleLayerOrder('front')}>
+          <ArrowUpToLine className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Send Backward" aria-label="Send Backward" disabled={!selectedNode} onClick={() => handleLayerOrder('back')}>
+          <ArrowDownToLine className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Align Left" aria-label="Align Left" onClick={() => handleAlign('left')}>
+          <AlignStartHorizontal className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Align Center" aria-label="Align Center" onClick={() => handleAlign('center')}>
+          <AlignCenterHorizontal className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Distribute Horizontally" aria-label="Distribute Horizontally" onClick={handleDistributeHorizontal}>
+          <AlignHorizontalDistributeCenter className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Auto Layout" aria-label="Auto Layout" onClick={handleAutoLayout}>
+          <LayoutGrid className="h-3.5 w-3.5" />
+        </Button>
+        <Button size="sm" variant="ghost" className="h-7 w-7 p-0" title="Fullscreen" aria-label="Toggle Fullscreen" onClick={handleToggleFullscreen}>
+          <Expand className="h-3.5 w-3.5" />
+        </Button>
 
-          <div className="mx-1 h-5 w-px bg-slate-200" />
+        <div className="mx-0.5 h-5 w-px shrink-0 bg-slate-300" />
 
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-[11px] font-medium text-slate-600">Connector:</span>
           <select
             aria-label="Connector Type"
             value={activeConnector}
@@ -627,49 +665,20 @@ function DiagramCanvasInner({
               </option>
             ))}
           </select>
-
-          <Button size="sm" variant="outline" onClick={handleValidateDiagram}>
-            <CheckCircle2 className="h-3.5 w-3.5 text-brand-600" />
-            Validate
-          </Button>
-          <Button size="sm" variant="primary" onClick={() => void handleSaveToDb()}>
-            <Save className="h-3.5 w-3.5" />
-            Save
-          </Button>
-          <Button size="sm" variant="ghost" title="Export SVG" aria-label="Export SVG" onClick={handleExportSvg}>
-            <Download className="h-3.5 w-3.5" />
-            SVG
-          </Button>
-          <Button size="sm" variant="ghost" title="Export PNG" aria-label="Export PNG" onClick={handleExportPng}>
-            <ImageIcon className="h-3.5 w-3.5" />
-            PNG
-          </Button>
-          <Button size="sm" variant="ghost" title="Export JSON" aria-label="Export JSON" onClick={handleExportJson}>
-            <FileJson className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            size="sm"
-            variant={inspectorOpen ? 'secondary' : 'outline'}
-            title="Toggle Properties Inspector"
-            aria-label="Toggle Properties Inspector"
-            onClick={() => setInspectorOpen((o) => !o)}
-          >
-            {inspectorOpen ? <PanelRightClose className="h-3.5 w-3.5" /> : <PanelRightOpen className="h-3.5 w-3.5" />}
-            Inspector
-          </Button>
         </div>
       </div>
 
-      {/* Scenario Prompt Bar (Guided / Timed) */}
+      {/* Scenario Prompt Banner */}
       {mode !== 'blank' && !embedded ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-brand-50/40 px-4 py-2 text-xs text-slate-700">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-brand-200 bg-brand-50/50 px-4 py-2 text-xs text-slate-800">
           <span>
-            <strong className="font-semibold text-brand-700">Scenario Prompt:</strong>{' '}
+            <strong className="font-semibold text-brand-700">IBT Task:</strong>{' '}
             {spec.guidedPrompt.prompt}
           </span>
           <Button
             size="sm"
             variant="ghost"
+            className="h-7 text-xs"
             onClick={() => {
               pushHistory(nodes, edges);
               setNodes(initialGraph.nodes);
@@ -688,20 +697,20 @@ function DiagramCanvasInner({
         </div>
       ) : null}
 
-      {/* Main 3-Column Editor Workspace: Left Palette | Center Canvas | Collapsible Right Inspector */}
+      {/* Main 3-Pane TOPCIT IBT Studio: Left Visual Shape Palette | Crisp White Graph Canvas | Collapsible Right Inspector */}
       <div className="flex min-h-0 flex-1 overflow-hidden">
-        {/* Left Context-Sensitive Shape Palette */}
+        {/* Left Visual Shape Palette (2-column SVG symbol grid) */}
         <aside
           aria-label="Diagram Shape Palette"
-          className={`flex shrink-0 flex-col border-r border-slate-200 bg-slate-50/70 transition-all ${
-            paletteOpen ? 'w-56' : 'w-11'
+          className={`flex shrink-0 flex-col border-r border-slate-300 bg-slate-50 transition-all ${
+            paletteOpen ? 'w-60' : 'w-10'
           }`}
         >
-          <div className="flex items-center justify-between border-b border-slate-200 px-2.5 py-2">
+          <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100/70 px-2.5 py-2">
             {paletteOpen ? (
-              <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+              <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-slate-700">
                 <Layers className="h-3.5 w-3.5 text-brand-600" />
-                {spec.shortName} Shapes
+                {spec.shortName} Objects
               </span>
             ) : null}
             <button
@@ -710,18 +719,18 @@ function DiagramCanvasInner({
               onClick={() => setPaletteOpen((o) => !o)}
               className="rounded p-1 text-slate-500 hover:bg-slate-200 cursor-pointer"
             >
-              {paletteOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+              {paletteOpen ? <PanelLeftClose className="h-3.5 w-3.5" /> : <PanelLeftOpen className="h-3.5 w-3.5" />}
             </button>
           </div>
 
           {paletteOpen ? (
             <>
-              <div className="p-2 border-b border-slate-200">
+              <div className="p-2 border-b border-slate-200 bg-white">
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-2 top-2 h-3.5 w-3.5 text-slate-400" />
                   <Input
                     aria-label="Search shapes"
-                    placeholder="Filter shapes..."
+                    placeholder="Search shapes..."
                     value={paletteSearch}
                     onChange={(e) => setPaletteSearch(e.target.value)}
                     className="h-7 pl-7 text-xs"
@@ -729,34 +738,37 @@ function DiagramCanvasInner({
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
-                {filteredPalette.map((shape) => (
-                  <button
-                    key={shape.shapeType}
-                    type="button"
-                    draggable
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('application/prepcit-shape', JSON.stringify(shape));
-                      e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    onClick={() => insertShape(shape)}
-                    className="flex w-full items-center justify-between gap-2 rounded-md border border-slate-200 bg-white px-2.5 py-2 text-left text-xs font-medium text-slate-800 hover:border-brand-400 hover:bg-brand-50/40 cursor-grab active:cursor-grabbing"
-                  >
-                    <span className="truncate">{shape.label}</span>
-                    <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
-                      {shape.category}
-                    </span>
-                  </button>
-                ))}
-                <p className="pt-2 text-[10px] leading-relaxed text-slate-500">
-                  Click or drag any shape onto the canvas. Drag from handle dots to connect nodes. Double-click a node to inspect/edit.
+              <div className="flex-1 overflow-y-auto p-2">
+                <div className="grid grid-cols-2 gap-1.5">
+                  {filteredPalette.map((shape) => (
+                    <button
+                      key={shape.shapeType}
+                      type="button"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData('application/prepcit-shape', JSON.stringify(shape));
+                        e.dataTransfer.effectAllowed = 'move';
+                      }}
+                      onClick={() => insertShape(shape)}
+                      title={`Click or drag to insert ${shape.label}`}
+                      className="flex flex-col items-center justify-center gap-1 rounded-md border border-slate-200 bg-white px-1.5 py-2.5 text-center transition-all hover:border-brand-500 hover:bg-brand-50/40 hover:shadow-xs cursor-grab active:cursor-grabbing"
+                    >
+                      <PaletteShapeIcon shapeType={shape.shapeType} />
+                      <span className="line-clamp-2 text-[10px] font-medium leading-tight text-slate-700">
+                        {shape.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-3 rounded border border-slate-200 bg-white p-2 text-[10px] leading-relaxed text-slate-500">
+                  <strong>Tip:</strong> Click or drag shapes onto the grid. Drag between red/slate handle dots to connect. Double-click any object to open Properties.
                 </p>
               </div>
             </>
           ) : null}
         </aside>
 
-        {/* Center Interactive Grid Canvas */}
+        {/* Center Pure-White Engineering Graph-Paper Canvas (Forced Light Mode) */}
         <div
           ref={canvasWrapperRef}
           className="relative flex-1 min-w-0 bg-white"
@@ -776,11 +788,13 @@ function DiagramCanvasInner({
               });
               insertShape(shape, position);
             } catch {
-              // ignore malformed drag payload
+              // ignore
             }
           }}
         >
           <ReactFlow
+            className="light"
+            style={{ backgroundColor: '#ffffff' }}
             nodes={nodes}
             edges={edges}
             nodeTypes={NODE_TYPES}
@@ -800,15 +814,43 @@ function DiagramCanvasInner({
             selectionOnDrag={toolMode === 'select'}
             fitView={initialGraph.nodes.length > 0}
             deleteKeyCode={null}
+            proOptions={{ hideAttribution: true }}
           >
-            <Background variant={BackgroundVariant.Dots} gap={18} size={1.2} color="#cbd5e1" />
-            <Controls position="bottom-left" />
+            <Background
+              id="minor-grid"
+              variant={BackgroundVariant.Lines}
+              gap={20}
+              lineWidth={0.7}
+              color="#eef2f6"
+            />
+            <Background
+              id="major-grid"
+              variant={BackgroundVariant.Lines}
+              gap={100}
+              lineWidth={1}
+              color="#dce3ec"
+            />
+            <Controls position="bottom-left" showInteractive={false} />
             <MiniMap
               position="bottom-right"
               nodeColor={(n) => (n.data as DiagramNodeData)?.strokeColor ?? '#334155'}
-              className="!border !border-slate-200 !bg-white/95"
+              className="!border !border-slate-300 !bg-white !shadow-xs"
             />
           </ReactFlow>
+
+          {/* Subtle Empty-Canvas Helper Hint */}
+          {nodes.length === 0 ? (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className="rounded-lg border border-dashed border-slate-300 bg-white/90 px-5 py-3 text-center shadow-xs">
+                <p className="text-xs font-semibold text-slate-700">
+                  {spec.name} Canvas Ready
+                </p>
+                <p className="mt-0.5 text-[11px] text-slate-500">
+                  Click or drag any shape from the left palette to begin modeling.
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           {/* Right-Click Node Context Menu */}
           {contextMenu ? (
@@ -872,7 +914,7 @@ function DiagramCanvasInner({
 
           {/* Structural Rubric Evaluation Overlay Card */}
           {evaluation ? (
-            <div className="absolute right-3 top-3 z-20 w-80 rounded-lg border border-slate-200 bg-white p-3.5 shadow-lg text-xs">
+            <div className="absolute right-3 top-3 z-20 w-80 rounded-lg border border-slate-300 bg-white p-3.5 shadow-lg text-xs">
               <div className="flex items-center justify-between">
                 <span className="font-bold text-slate-900">Structural Rubric Evaluation</span>
                 <button
@@ -888,7 +930,7 @@ function DiagramCanvasInner({
                   {evaluation.earnedPoints} / {evaluation.maxPoints} pts
                 </span>
                 <Badge variant={evaluation.scorePercent >= 80 ? 'success' : 'warning'}>
-                  {evaluation.scorePercent}% Structural Match
+                  {evaluation.scorePercent}% Match
                 </Badge>
               </div>
               {evaluation.passedChecks.length > 0 ? (
@@ -912,21 +954,20 @@ function DiagramCanvasInner({
                   ))}
                 </ul>
               ) : null}
-              <p className="mt-2 border-t border-slate-100 pt-1.5 text-[10px] text-slate-500">
-                Layout-independent graph evaluation. Complex scenario semantics may also warrant instructor/rubric review.
-              </p>
             </div>
           ) : null}
         </div>
 
-        {/* Collapsible Right Properties Inspector (Collapsed by Default) */}
+        {/* Collapsible Right Properties Inspector (TOPCIT/draw.io Text / Style / Arrange tabs) */}
         {inspectorOpen ? (
           <aside
             aria-label="Properties Inspector"
-            className="flex w-72 shrink-0 flex-col overflow-y-auto border-l border-slate-200 bg-slate-50/80 p-3.5 text-xs space-y-4"
+            className="flex w-72 shrink-0 flex-col overflow-y-auto border-l border-slate-300 bg-slate-50 text-xs"
           >
-            <div className="flex items-center justify-between border-b border-slate-200 pb-2">
-              <span className="font-semibold text-slate-900">Properties Inspector</span>
+            <div className="flex items-center justify-between border-b border-slate-200 bg-slate-100/70 px-3 py-2">
+              <span className="text-[11px] font-bold uppercase tracking-wide text-slate-700">
+                Properties Inspector
+              </span>
               <button
                 type="button"
                 aria-label="Close inspector"
@@ -938,135 +979,201 @@ function DiagramCanvasInner({
             </div>
 
             {selectedNode ? (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-[11px] text-slate-500">
-                  <span>Node ID: {selectedNode.id.slice(0, 10)}</span>
-                  <Badge variant="neutral">{selectedNode.data.shapeType}</Badge>
-                </div>
-
-                <div>
-                  <label htmlFor="prop-label" className="mb-1 block font-medium text-slate-700">
-                    Label
-                  </label>
-                  <Input
-                    id="prop-label"
-                    value={selectedNode.data.label}
-                    onChange={(e) => updateSelectedNodeData({ label: e.target.value })}
-                    className="h-8 text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="prop-details" className="mb-1 block font-medium text-slate-700">
-                    Details / Attributes / Columns / Methods
-                  </label>
-                  <textarea
-                    id="prop-details"
-                    rows={4}
-                    value={selectedNode.data.details}
-                    onChange={(e) => updateSelectedNodeData({ details: e.target.value })}
-                    placeholder="e.g. PK id INT&#10;+ method(): void"
-                    className="w-full rounded-md border border-slate-300 bg-white p-2 font-mono text-[11px]"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label htmlFor="prop-w" className="mb-1 block font-medium text-slate-700">
-                      Width (px)
-                    </label>
-                    <Input
-                      id="prop-w"
-                      type="number"
-                      min={40}
-                      max={600}
-                      value={selectedNode.data.width}
-                      onChange={(e) => updateSelectedNodeData({ width: Number(e.target.value) || 120 })}
-                      className="h-8 font-mono text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="prop-h" className="mb-1 block font-medium text-slate-700">
-                      Height (px)
-                    </label>
-                    <Input
-                      id="prop-h"
-                      type="number"
-                      min={30}
-                      max={500}
-                      value={selectedNode.data.height}
-                      onChange={(e) => updateSelectedNodeData({ height: Number(e.target.value) || 60 })}
-                      className="h-8 font-mono text-xs"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label htmlFor="prop-fill" className="mb-1 block font-medium text-slate-700">
-                      Fill Color
-                    </label>
-                    <input
-                      id="prop-fill"
-                      type="color"
-                      value={selectedNode.data.fillColor === 'transparent' ? '#ffffff' : selectedNode.data.fillColor}
-                      onChange={(e) => updateSelectedNodeData({ fillColor: e.target.value })}
-                      className="h-8 w-full rounded border border-slate-300 bg-white p-0.5 cursor-pointer"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="prop-stroke" className="mb-1 block font-medium text-slate-700">
-                      Border Color
-                    </label>
-                    <input
-                      id="prop-stroke"
-                      type="color"
-                      value={selectedNode.data.strokeColor}
-                      onChange={(e) => updateSelectedNodeData({ strokeColor: e.target.value })}
-                      className="h-8 w-full rounded border border-slate-300 bg-white p-0.5 cursor-pointer"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label htmlFor="prop-font" className="mb-1 block font-medium text-slate-700">
-                      Font Size
-                    </label>
-                    <Input
-                      id="prop-font"
-                      type="number"
-                      min={9}
-                      max={22}
-                      value={selectedNode.data.fontSize}
-                      onChange={(e) => updateSelectedNodeData({ fontSize: Number(e.target.value) || 12 })}
-                      className="h-8 font-mono text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="prop-align" className="mb-1 block font-medium text-slate-700">
-                      Text Align
-                    </label>
-                    <select
-                      id="prop-align"
-                      value={selectedNode.data.textAlign}
-                      onChange={(e) =>
-                        updateSelectedNodeData({
-                          textAlign: e.target.value as 'left' | 'center' | 'right',
-                        })
-                      }
-                      className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs"
+              <>
+                <div className="grid grid-cols-3 border-b border-slate-200 bg-white">
+                  {(['text', 'style', 'arrange'] as const).map((tab) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      onClick={() => setInspectorTab(tab)}
+                      className={`py-2 text-[11px] font-semibold capitalize border-b-2 cursor-pointer ${
+                        inspectorTab === tab
+                          ? 'border-brand-600 text-brand-700 bg-brand-50/30'
+                          : 'border-transparent text-slate-500 hover:text-slate-800'
+                      }`}
                     >
-                      <option value="left">Left</option>
-                      <option value="center">Center</option>
-                      <option value="right">Right</option>
-                    </select>
-                  </div>
+                      {tab}
+                    </button>
+                  ))}
                 </div>
-              </div>
+
+                <div className="p-3.5 space-y-3">
+                  {inspectorTab === 'text' ? (
+                    <>
+                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                        <span>ID: {selectedNode.id.slice(0, 10)}</span>
+                        <Badge variant="neutral">{selectedNode.data.shapeType}</Badge>
+                      </div>
+                      <div>
+                        <label htmlFor="prop-label" className="mb-1 block font-medium text-slate-700">
+                          Label
+                        </label>
+                        <Input
+                          id="prop-label"
+                          value={selectedNode.data.label}
+                          onChange={(e) => updateSelectedNodeData({ label: e.target.value })}
+                          className="h-8 text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label htmlFor="prop-details" className="mb-1 block font-medium text-slate-700">
+                          Attributes / Methods / Columns
+                        </label>
+                        <textarea
+                          id="prop-details"
+                          rows={5}
+                          value={selectedNode.data.details}
+                          onChange={(e) => updateSelectedNodeData({ details: e.target.value })}
+                          placeholder="e.g. PK id INT&#10;+ method(): void"
+                          className="w-full rounded-md border border-slate-300 bg-white p-2 font-mono text-[11px]"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label htmlFor="prop-font" className="mb-1 block font-medium text-slate-700">
+                            Font Size
+                          </label>
+                          <Input
+                            id="prop-font"
+                            type="number"
+                            min={9}
+                            max={22}
+                            value={selectedNode.data.fontSize}
+                            onChange={(e) =>
+                              updateSelectedNodeData({ fontSize: Number(e.target.value) || 12 })
+                            }
+                            className="h-8 font-mono text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="prop-align" className="mb-1 block font-medium text-slate-700">
+                            Alignment
+                          </label>
+                          <select
+                            id="prop-align"
+                            value={selectedNode.data.textAlign}
+                            onChange={(e) =>
+                              updateSelectedNodeData({
+                                textAlign: e.target.value as 'left' | 'center' | 'right',
+                              })
+                            }
+                            className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs"
+                          >
+                            <option value="left">Left</option>
+                            <option value="center">Center</option>
+                            <option value="right">Right</option>
+                          </select>
+                        </div>
+                      </div>
+                    </>
+                  ) : inspectorTab === 'style' ? (
+                    <>
+                      <div>
+                        <span className="mb-1.5 block font-medium text-slate-700">Fill Color</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {QUICK_FILL_SWATCHES.map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              aria-label={`Fill ${c}`}
+                              onClick={() => updateSelectedNodeData({ fillColor: c })}
+                              style={{ backgroundColor: c }}
+                              className={`h-6 w-6 rounded border cursor-pointer ${
+                                selectedNode.data.fillColor === c
+                                  ? 'ring-2 ring-brand-600 border-brand-600'
+                                  : 'border-slate-300'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <span className="mb-1.5 block font-medium text-slate-700">Border Color</span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {QUICK_STROKE_SWATCHES.map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              aria-label={`Stroke ${c}`}
+                              onClick={() => updateSelectedNodeData({ strokeColor: c })}
+                              style={{ backgroundColor: c }}
+                              className={`h-6 w-6 rounded border cursor-pointer ${
+                                selectedNode.data.strokeColor === c
+                                  ? 'ring-2 ring-brand-600 border-brand-600'
+                                  : 'border-slate-300'
+                              }`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label htmlFor="prop-stroke-w" className="mb-1 block font-medium text-slate-700">
+                          Border Width ({selectedNode.data.strokeWidth}px)
+                        </label>
+                        <input
+                          id="prop-stroke-w"
+                          type="range"
+                          min={1}
+                          max={4}
+                          value={selectedNode.data.strokeWidth}
+                          onChange={(e) =>
+                            updateSelectedNodeData({ strokeWidth: Number(e.target.value) })
+                          }
+                          className="w-full accent-brand-600"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label htmlFor="prop-w" className="mb-1 block font-medium text-slate-700">
+                            Width (px)
+                          </label>
+                          <Input
+                            id="prop-w"
+                            type="number"
+                            min={40}
+                            max={600}
+                            value={selectedNode.data.width}
+                            onChange={(e) =>
+                              updateSelectedNodeData({ width: Number(e.target.value) || 120 })
+                            }
+                            className="h-8 font-mono text-xs"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="prop-h" className="mb-1 block font-medium text-slate-700">
+                            Height (px)
+                          </label>
+                          <Input
+                            id="prop-h"
+                            type="number"
+                            min={30}
+                            max={500}
+                            value={selectedNode.data.height}
+                            onChange={(e) =>
+                              updateSelectedNodeData({ height: Number(e.target.value) || 60 })
+                            }
+                            className="h-8 font-mono text-xs"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex gap-2 pt-1">
+                        <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => handleLayerOrder('front')}>
+                          To Front
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => handleLayerOrder('back')}>
+                          To Back
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
             ) : selectedEdge ? (
-              <div className="space-y-3">
-                <p className="text-[11px] font-semibold text-slate-600">Selected Connector</p>
+              <div className="p-3.5 space-y-3">
+                <p className="text-[11px] font-semibold text-slate-700">Selected Connector</p>
                 <div>
                   <label htmlFor="edge-label" className="mb-1 block font-medium text-slate-700">
                     Label / Guard / Multiplicity
@@ -1103,9 +1210,9 @@ function DiagramCanvasInner({
                 </div>
               </div>
             ) : (
-              <p className="text-slate-500">
-                Select any node or connector on the canvas to edit its label, attributes/columns, colors, dimensions, or UML/ERD semantics.
-              </p>
+              <div className="p-4 text-slate-500">
+                Select any object or connector on the canvas to edit its label, UML attributes/columns, colors, or dimensions.
+              </div>
             )}
           </aside>
         ) : null}

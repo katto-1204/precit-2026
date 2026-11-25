@@ -10,6 +10,7 @@ import {
   Upload,
 } from 'lucide-react';
 import { DiagramWorkspace } from '@/components/labs/DiagramWorkspace';
+import { DiagramCategoryPreview } from '@/components/labs/PaletteShapeIcon';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -137,7 +138,9 @@ export function DiagramLabPage() {
                 </CardDescription>
               </CardHeader>
 
-              <CardContent className="flex flex-1 flex-col justify-between space-y-4 pt-3">
+              <CardContent className="flex flex-1 flex-col justify-between space-y-3 pt-3">
+                <DiagramCategoryPreview type={cat.id} />
+
                 <div className="flex flex-wrap gap-1">
                   {cat.palette.slice(0, 4).map((s) => (
                     <span

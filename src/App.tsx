@@ -10,12 +10,14 @@ import { CodingLabPage } from '@/pages/CodingLabPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { DiagramLabPage } from '@/pages/DiagramLabPage';
 import { IntegratedChallengesPage } from '@/pages/IntegratedChallengesPage';
+import { LandingPage } from '@/pages/LandingPage';
 import { MistakeReviewPage } from '@/pages/MistakeReviewPage';
 import { MockExamPage } from '@/pages/MockExamPage';
 import { PracticeHubPage } from '@/pages/PracticeHubPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { StudyLibraryPage } from '@/pages/StudyLibraryPage';
 import { StudyPlannerPage } from '@/pages/StudyPlannerPage';
+import { TutorialGuidePage } from '@/pages/TutorialGuidePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,8 +31,10 @@ const queryClient = new QueryClient({
 export function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route element={<AppShell />}>
-        <Route path="/" element={<DashboardPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/guide" element={<TutorialGuidePage />} />
         <Route path="/study-library" element={<StudyLibraryPage />} />
         <Route path="/practice" element={<PracticeHubPage />} />
         <Route path="/mock-exam" element={<MockExamPage />} />
