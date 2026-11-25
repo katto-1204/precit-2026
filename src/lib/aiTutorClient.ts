@@ -98,10 +98,12 @@ export function buildOfflineTutorFallback(prompt: string, reasonNote?: string): 
   };
 }
 
+const AI_API_BASE = (import.meta.env.VITE_AI_API_BASE as string | undefined) ?? '';
+
 export async function askPrepCitTutor(
   prompt: string,
   mode: 'tutor' | 'descriptive_feedback' | 'weakness_plan' | 'question_draft' = 'tutor',
-  endpoint = 'http://127.0.0.1:8788/api/ai/tutor',
+  endpoint = `${AI_API_BASE}/api/ai/tutor`,
   fetcher: typeof fetch = fetch,
 ): Promise<TutorReply> {
   try {
@@ -144,7 +146,7 @@ export async function askPrepCitTutor(
   } catch {
     return buildOfflineTutorFallback(
       prompt,
-      'Gemini backend proxy (http://127.0.0.1:8788) is not running or offline.',
+      'Gemini AI endpoint is unavailable or offline; using local 2026 syllabus retrieval.',
     );
   }
 }

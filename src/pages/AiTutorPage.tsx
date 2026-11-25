@@ -45,7 +45,8 @@ export function AiTutorPage() {
     setDraftFeedback(null);
     const topic = getTopicsByDomain(draftDomain)[0];
     try {
-      const res = await fetch('http://127.0.0.1:8788/api/ai/generate-question', {
+      const apiBase = (import.meta.env.VITE_AI_API_BASE as string | undefined) ?? '';
+      const res = await fetch(`${apiBase}/api/ai/generate-question`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

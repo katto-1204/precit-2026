@@ -32,7 +32,9 @@ export interface CodingGradeSummary {
   errorMessage?: string;
 }
 
-const DEFAULT_SANDBOX_URL = 'http://localhost:8787/api/execute';
+const DEFAULT_SANDBOX_URL =
+  (import.meta.env.VITE_SANDBOX_URL as string | undefined) ||
+  'http://localhost:8787/api/execute';
 
 let sharedPythonWorker: Worker | null = null;
 

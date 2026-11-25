@@ -297,7 +297,8 @@ export function AnalyticsPage() {
           return;
         }
         try {
-          const res = await fetch('http://127.0.0.1:8788/api/ai/grade-descriptive', {
+          const apiBase = (import.meta.env.VITE_AI_API_BASE as string | undefined) ?? '';
+          const res = await fetch(`${apiBase}/api/ai/grade-descriptive`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -330,7 +331,7 @@ export function AnalyticsPage() {
         } catch {
           setAutoGradeMessages((p) => ({
             ...p,
-            [q.id]: 'Gemini backend (http://127.0.0.1:8788) offline. Use the transparent rubric sliders below to self-grade.',
+            [q.id]: 'Gemini AI endpoint is not configured or offline. Use the transparent rubric sliders below to self-grade.',
           }));
         }
       }

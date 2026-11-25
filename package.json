@@ -4,6 +4,10 @@
   "version": "0.1.0",
   "description": "PrepCIT — Unofficial 2026 TOPCIT-style examination simulator and personalized learning platform",
   "type": "module",
+  "packageManager": "pnpm@10.33.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

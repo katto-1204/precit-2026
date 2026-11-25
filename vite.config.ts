@@ -18,6 +18,14 @@ export default defineConfig({
         theme_color: '#c81e1e',
         background_color: '#ffffff',
         display: 'standalone',
+        icons: [
+          {
+            src: '/favicon.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
+            purpose: 'any maskable',
+          },
+        ],
       },
       workbox: {
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
@@ -50,5 +58,11 @@ export default defineConfig({
   server: {
     port: 5173,
     strictPort: false,
+    proxy: {
+      '/api/ai': {
+        target: 'http://127.0.0.1:8788',
+        changeOrigin: true,
+      },
+    },
   },
 });

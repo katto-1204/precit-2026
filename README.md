@@ -13,6 +13,17 @@ pnpm build
 pnpm test
 ```
 
+## Deploy to Netlify
+
+This repository includes [netlify.toml](netlify.toml), Corepack `packageManager` config, SPA fallback routing, WASM/PWA headers, and a serverless Gemini function at `netlify/functions/ai.mjs`.
+
+1. Push to GitHub and open **Netlify → Add new site → Import an existing project**.
+2. Select your repository (`katto-1204/precit-2026`). Netlify automatically detects:
+   - **Build command**: `pnpm build`
+   - **Publish directory**: `dist`
+   - **Functions directory**: `netlify/functions`
+3. *(Optional)* To enable live Gemini Flash AI tutoring & descriptive rubric estimates on Netlify, add **`GEMINI_API_KEY`** under **Site configuration → Environment variables** (see `.env.example`). Without it, PrepCIT still works 100% locally with zero errors via offline syllabus fallback.
+
 ## Optional Local Backend Services
 
 ### 1. Isolated Docker Sandbox Runner (C, C++, Java)
