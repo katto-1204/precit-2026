@@ -138,7 +138,7 @@ export function GuidedTourModal() {
     <div
       role="dialog"
       aria-label="PrepCIT Interactive Guided Tour"
-      className="fixed bottom-4 right-4 left-4 z-50 mx-auto max-w-lg rounded-xl border-2 border-brand-600 bg-white shadow-2xl sm:left-auto"
+      className="fixed top-16 right-4 left-4 z-50 mx-auto max-h-[calc(100vh-5.5rem)] max-w-lg overflow-y-auto rounded-xl border-2 border-brand-600 bg-white shadow-2xl sm:left-auto sm:right-6"
     >
       {/* Top accent strip */}
       <div className="flex items-center justify-between gap-2 rounded-t-[10px] border-b border-slate-200 bg-brand-50/70 px-4 py-2.5">
