@@ -32,27 +32,81 @@ export interface CodingGradeSummary {
   errorMessage?: string;
 }
 
+export type PythonRuntimeStatus = 'idle' | 'loading' | 'ready' | 'error';
+
 const DEFAULT_SANDBOX_URL =
   (import.meta.env.VITE_SANDBOX_URL as string | undefined) ||
   'http://localhost:8787/api/execute';
 
 let sharedPythonWorker: Worker | null = null;
+let currentPythonStatus: PythonRuntimeStatus = 'idle';
+const statusListeners = new Set<(status: PythonRuntimeStatus) => void>();
+
+function setPythonStatus(next: PythonRuntimeStatus) {
+  currentPythonStatus = next;
+  for (const fn of statusListeners) {
+    fn(next);
+  }
+}
+
+export function subscribePythonRuntimeStatus(
+  listener: (status: PythonRuntimeStatus) => void,
+): () => void {
+  statusListeners.add(listener);
+  listener(currentPythonStatus);
+  return () => {
+    statusListeners.delete(listener);
+  };
+}
+
+function ensurePythonWorker(): Worker {
+  if (!sharedPythonWorker) {
+    sharedPythonWorker = new Worker(
+      new URL('../workers/pyodide.worker.ts', import.meta.url),
+      { type: 'module' },
+    );
+    sharedPythonWorker.addEventListener(
+      'message',
+      (e: MessageEvent<{ type?: string; status?: PythonRuntimeStatus }>) => {
+        if (e.data?.type === 'runtime_status' && e.data.status) {
+          setPythonStatus(e.data.status);
+        }
+      },
+    );
+  }
+  return sharedPythonWorker;
+}
 
 function resetPythonWorker() {
   if (sharedPythonWorker) {
     sharedPythonWorker.terminate();
     sharedPythonWorker = null;
   }
+  setPythonStatus('idle');
 }
 
 /**
- * Executes Python 3 inside an isolated Pyodide Web Worker with hard timeout termination
- * protecting against infinite loops and runaway CPU.
+ * Quietly preloads Pyodide in the background when the user visits the Coding Lab
+ * so clicking "Run Code" executes immediately instead of waiting on a cold download.
+ */
+export function warmupPythonRuntime(): void {
+  if (typeof Worker === 'undefined') return;
+  if (currentPythonStatus === 'ready' || currentPythonStatus === 'loading') return;
+  const worker = ensurePythonWorker();
+  setPythonStatus('loading');
+  worker.postMessage({ type: 'warmup' });
+}
+
+/**
+ * Executes Python 3 inside an isolated Pyodide Web Worker using a 2-stage timeout:
+ * - Stage 1 (bootTimeoutMs = 45s): generous first-time Pyodide WASM download window.
+ * - Stage 2 (timeoutMs = 6s): strict code execution guard that starts ONLY after Pyodide is loaded.
  */
 export function runPythonInWorker(
   code: string,
   stdin: string,
-  timeoutMs = 5000,
+  timeoutMs = 6000,
+  bootTimeoutMs = 45000,
 ): Promise<ExecutionResult> {
   if (typeof Worker === 'undefined') {
     return Promise.resolve({
@@ -65,53 +119,83 @@ export function runPythonInWorker(
   }
 
   return new Promise((resolve) => {
-    if (!sharedPythonWorker) {
-      sharedPythonWorker = new Worker(
-        new URL('../workers/pyodide.worker.ts', import.meta.url),
-        { type: 'module' },
-      );
-    }
-
-    const worker = sharedPythonWorker;
+    const worker = ensurePythonWorker();
     const reqId = `py-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
     let settled = false;
+    let execStarted = false;
 
-    const timer = window.setTimeout(() => {
+    let activeTimer: number | null = window.setTimeout(() => {
       if (settled) return;
       settled = true;
       resetPythonWorker();
       resolve({
         ok: false,
         stdout: '',
-        stderr: `Execution terminated: exceeded ${timeoutMs}ms time limit (possible infinite loop).`,
-        elapsedMs: timeoutMs,
+        stderr:
+          'The Python engine took too long to download on first load (over 45s). Please check your internet connection and click Run Code again — once downloaded, Python runs instantly offline!',
+        elapsedMs: bootTimeoutMs,
         timedOut: true,
+        runtimeUnavailable: true,
       });
-    }, timeoutMs);
+    }, bootTimeoutMs);
 
-    const onMessage = (e: MessageEvent<{ id: string } & ExecutionResult>) => {
-      if (e.data?.id !== reqId || settled) return;
-      settled = true;
-      window.clearTimeout(timer);
-      worker.removeEventListener('message', onMessage);
-      worker.removeEventListener('error', onError);
-      resolve({
-        ok: e.data.ok,
-        stdout: e.data.stdout,
-        stderr: e.data.stderr,
-        elapsedMs: e.data.elapsedMs,
-      });
+    const clearActiveTimer = () => {
+      if (activeTimer !== null) {
+        window.clearTimeout(activeTimer);
+        activeTimer = null;
+      }
+    };
+
+    const onMessage = (
+      e: MessageEvent<{ type?: string; id?: string } & Partial<ExecutionResult>>,
+    ) => {
+      if (settled || e.data?.id !== reqId) return;
+
+      if (e.data.type === 'exec_started') {
+        execStarted = true;
+        clearActiveTimer();
+        // Now start the strict infinite-loop execution guard
+        activeTimer = window.setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          resetPythonWorker();
+          resolve({
+            ok: false,
+            stdout: '',
+            stderr: `Your Python code ran longer than ${timeoutMs / 1000} seconds and was paused safely (check for an infinite while-loop!).`,
+            elapsedMs: timeoutMs,
+            timedOut: true,
+          });
+        }, timeoutMs);
+        return;
+      }
+
+      if (e.data.type === 'exec_result' || typeof e.data.ok === 'boolean') {
+        settled = true;
+        clearActiveTimer();
+        worker.removeEventListener('message', onMessage);
+        worker.removeEventListener('error', onError);
+        resolve({
+          ok: Boolean(e.data.ok),
+          stdout: String(e.data.stdout ?? ''),
+          stderr: String(e.data.stderr ?? ''),
+          elapsedMs: Number(e.data.elapsedMs ?? 0),
+          runtimeUnavailable: Boolean(e.data.runtimeUnavailable),
+        });
+      }
     };
 
     const onError = (err: ErrorEvent) => {
       if (settled) return;
       settled = true;
-      window.clearTimeout(timer);
+      clearActiveTimer();
       resetPythonWorker();
       resolve({
         ok: false,
         stdout: '',
-        stderr: `Python worker error: ${err.message || 'Worker crashed'}`,
+        stderr: execStarted
+          ? `Python runtime interrupted: ${err.message || 'Worker crashed'}`
+          : `Could not initialize Python engine: ${err.message || 'Network or Worker error'}`,
         elapsedMs: 0,
         runtimeUnavailable: true,
       });
@@ -119,7 +203,7 @@ export function runPythonInWorker(
 
     worker.addEventListener('message', onMessage);
     worker.addEventListener('error', onError);
-    worker.postMessage({ id: reqId, code, stdin });
+    worker.postMessage({ type: 'run', id: reqId, code, stdin });
   });
 }
 
@@ -174,7 +258,7 @@ export async function executeCode(
   stdin: string,
 ): Promise<ExecutionResult> {
   if (language === 'python') {
-    return runPythonInWorker(code, stdin, 6000);
+    return runPythonInWorker(code, stdin, 6000, 45000);
   }
   return runCompiledSandbox(language, code, stdin);
 }

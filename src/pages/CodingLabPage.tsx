@@ -45,8 +45,11 @@ import { updateTopicMastery } from '@/domain/learningEngine';
 import {
   executeCode,
   gradeCodingSubmission,
+  subscribePythonRuntimeStatus,
+  warmupPythonRuntime,
   type CodingGradeSummary,
   type ExecutionResult,
+  type PythonRuntimeStatus,
 } from '@/lib/codeRunner';
 import {
   executeSqlQuery,
@@ -89,10 +92,17 @@ export function CodingLabPage() {
   const [sqlGrade, setSqlGrade] = useState<SqlGradeResult | null>(null);
   const [sqlHistory, setSqlHistory] = useState<string[]>([]);
   const [runningSql, setRunningSql] = useState(false);
-  const [showPythonTutorial, setShowPythonTutorial] = useState(false);
+  const [showPythonTutorial, setShowPythonTutorial] = useState(true);
   const [activePyRecipe, setActivePyRecipe] = useState<CodingTutorialRecipe | null>(null);
   const [showSqlTutorial, setShowSqlTutorial] = useState(true);
   const [activeSqlRecipe, setActiveSqlRecipe] = useState<SqlTutorialRecipe | null>(null);
+  const [pyRuntimeStatus, setPyRuntimeStatus] = useState<PythonRuntimeStatus>('idle');
+
+  useEffect(() => {
+    const unsub = subscribePythonRuntimeStatus(setPyRuntimeStatus);
+    warmupPythonRuntime();
+    return unsub;
+  }, []);
 
   const codingCoach = CODING_CHALLENGE_COACHING[activeChallenge.id];
   const sqlCoach = SQL_CHALLENGE_COACHING[activeSqlChallenge.id];
@@ -284,8 +294,26 @@ export function CodingLabPage() {
                   {opt.label}
                 </button>
               ))}
-              <Badge variant={language === 'python' ? 'success' : 'neutral'}>
-                {currentLangMeta.runtime}
+              <Badge
+                variant={
+                  language !== 'python'
+                    ? 'neutral'
+                    : pyRuntimeStatus === 'ready'
+                      ? 'success'
+                      : pyRuntimeStatus === 'error'
+                        ? 'danger'
+                        : 'info'
+                }
+              >
+                {language !== 'python'
+                  ? currentLangMeta.runtime
+                  : pyRuntimeStatus === 'ready'
+                    ? 'Python 3 Engine Ready'
+                    : pyRuntimeStatus === 'loading'
+                      ? 'Warming up Python 3 (~10s first time)...'
+                      : pyRuntimeStatus === 'error'
+                        ? 'Python Engine Needs Internet First Load'
+                        : 'In-Browser Python 3'}
               </Badge>
             </div>
 
@@ -468,7 +496,11 @@ export function CodingLabPage() {
                     </Button>
                     <Button size="sm" variant="outline" disabled={runningCode} onClick={() => void handleRunCode()}>
                       <Play className="h-3.5 w-3.5" />
-                      {runningCode ? 'Running...' : 'Run Code'}
+                      {runningCode
+                        ? pyRuntimeStatus === 'loading'
+                          ? 'Loading Python...'
+                          : 'Running...'
+                        : 'Run Code'}
                     </Button>
                     <Button size="sm" disabled={runningCode} onClick={() => void handleSubmitCode()}>
                       <Send className="h-3.5 w-3.5" />
@@ -537,7 +569,14 @@ export function CodingLabPage() {
                     ) : null}
                   </CardHeader>
                   <CardContent className="p-3">
-                    {execResult ? (
+                    {runningCode && pyRuntimeStatus === 'loading' ? (
+                      <div className="rounded border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                        <p className="font-semibold">Warming up Python 3 engine (first-time load ~10s)...</p>
+                        <p className="mt-1 text-[11px] text-sky-800">
+                          Downloading the in-browser Pyodide WASM runtime once. Your code will execute automatically as soon as it finishes — after this, runs are instant!
+                        </p>
+                      </div>
+                    ) : execResult ? (
                       <div className="space-y-2 font-mono text-xs">
                         {execResult.stdout ? (
                           <pre className="max-h-28 overflow-auto rounded bg-slate-900 p-2 text-emerald-300 whitespace-pre-wrap">
