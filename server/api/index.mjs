@@ -1,4 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { resolve } from 'node:path';
 
 /**
  * PrepCIT V2.0 Backend Proxy for Google Gemini Developer API (Free Tier Flash-First).
@@ -11,9 +13,28 @@ import { createServer } from 'node:http';
  *   POST /api/ai/generate-question
  */
 
+// Load workspace .env / .env.local automatically for local convenience without overriding shell env
+for (const envFile of ['.env', '.env.local']) {
+  const fullPath = resolve(process.cwd(), envFile);
+  if (existsSync(fullPath)) {
+    for (const line of readFileSync(fullPath, 'utf8').split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) continue;
+      const eq = trimmed.indexOf('=');
+      if (eq <= 0) continue;
+      const k = trimmed.slice(0, eq).trim();
+      const v = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, '');
+      if (k && !(k in process.env)) {
+        process.env[k] = v;
+      }
+    }
+  }
+}
+
 const PORT = Number(process.env.API_PORT || 8788);
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite'];
 const GEMINI_DAILY_LIMIT = Number(process.env.GEMINI_DAILY_REQUEST_LIMIT || 50);
 const GEMINI_ENABLED = process.env.GEMINI_AI_ENABLED !== 'false';
 
@@ -34,9 +55,9 @@ function checkBudget() {
   };
 }
 
-async function callGeminiWithBackoff(prompt, systemInstruction, jsonMode = false, retries = 2) {
+async function callSingleGeminiModel(model, prompt, systemInstruction, jsonMode = false, retries = 2) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
-    GEMINI_MODEL,
+    model,
   )}:generateContent?key=${encodeURIComponent(GEMINI_API_KEY)}`;
 
   for (let attempt = 0; attempt <= retries; attempt += 1) {
@@ -60,7 +81,9 @@ async function callGeminiWithBackoff(prompt, systemInstruction, jsonMode = false
 
     if (!res.ok) {
       const errBody = await res.text();
-      throw new Error(`Gemini API HTTP ${res.status}: ${errBody.slice(0, 200)}`);
+      const err = new Error(`Gemini API HTTP ${res.status}: ${errBody.slice(0, 220)}`);
+      err.httpStatus = res.status;
+      throw err;
     }
 
     const data = await res.json();
@@ -69,6 +92,23 @@ async function callGeminiWithBackoff(prompt, systemInstruction, jsonMode = false
     return text;
   }
   throw new Error('Gemini request failed after retries.');
+}
+
+async function callGeminiWithBackoff(prompt, systemInstruction, jsonMode = false, retries = 2) {
+  const candidates = Array.from(new Set([GEMINI_MODEL, ...FALLBACK_MODELS].filter(Boolean)));
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      return await callSingleGeminiModel(candidate, prompt, systemInstruction, jsonMode, retries);
+    } catch (err) {
+      lastError = err;
+      if (err && err.httpStatus === 404) {
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError || new Error('No available Gemini Flash model responded.');
 }
 
 const SYSTEM_PROMPT = `You are PrepCIT AI Tutor, a rigorous CS/IT instructor preparing a BSIT student for the revised 2026 TOPCIT exam (M1 Software Dev, M2 Data Mgmt, M3 Systems Architecture & InfoSec, M4 IT Business).

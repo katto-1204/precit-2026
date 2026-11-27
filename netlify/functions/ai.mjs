@@ -22,7 +22,9 @@ function jsonResponse(payload, status = 200) {
   });
 }
 
-async function callGemini(apiKey, model, prompt, jsonMode = false, retries = 2) {
+const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite'];
+
+async function callGeminiSingleModel(apiKey, model, prompt, jsonMode = false, retries = 2) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
     model,
   )}:generateContent?key=${encodeURIComponent(apiKey)}`;
@@ -48,21 +50,41 @@ async function callGemini(apiKey, model, prompt, jsonMode = false, retries = 2) 
 
     if (!res.ok) {
       const errBody = await res.text();
-      throw new Error(`Gemini API HTTP ${res.status}: ${errBody.slice(0, 200)}`);
+      const err = new Error(`Gemini API HTTP ${res.status}: ${errBody.slice(0, 220)}`);
+      err.httpStatus = res.status;
+      throw err;
     }
 
     const data = await res.json();
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) throw new Error('Gemini returned empty response.');
-    return text;
+    return { text, resolvedModel: model };
   }
 
   throw new Error('Gemini request failed after retries.');
 }
 
+async function callGemini(apiKey, preferredModel, prompt, jsonMode = false) {
+  const candidates = Array.from(new Set([preferredModel, ...FALLBACK_MODELS].filter(Boolean)));
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      return await callGeminiSingleModel(apiKey, candidate, prompt, jsonMode);
+    } catch (err) {
+      lastError = err;
+      // Only try next model on 404 (model deprecated / unavailable for account)
+      if (err && err.httpStatus === 404) {
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError || new Error('No available Gemini Flash model responded.');
+}
+
 export default async function handler(req) {
   const apiKey = process.env.GEMINI_API_KEY || '';
-  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
   const enabled = process.env.GEMINI_AI_ENABLED !== 'false';
   const url = new URL(req.url);
   const subpath = url.pathname.replace(/^\/api\/ai\/?/, '');
@@ -97,11 +119,11 @@ export default async function handler(req) {
       if (typeof prompt !== 'string' || prompt.trim().length < 2) {
         return jsonResponse({ ok: false, error: 'Prompt is required.' }, 400);
       }
-      const answer = await callGemini(apiKey, model, prompt, false);
+      const { text: answer, resolvedModel } = await callGemini(apiKey, model, prompt, false);
       return jsonResponse({
         ok: true,
         cached: false,
-        model,
+        model: resolvedModel,
         answer,
         disclaimer: 'AI-Assisted Estimate — Not Official TOPCIT Evaluation',
       });
@@ -125,14 +147,14 @@ Return JSON with keys: estimatedPoints (integer 0..${maxPoints}), correctConcept
 Question: ${questionPrompt}
 Rubric: ${JSON.stringify(rubric || [])}
 Student Answer: ${studentAnswer}`;
-      const rawText = await callGemini(apiKey, model, gradingPrompt, true);
+      const { text: rawText, resolvedModel } = await callGemini(apiKey, model, gradingPrompt, true);
       const parsed = JSON.parse(rawText);
       return jsonResponse({
         ok: true,
         ...parsed,
         estimatedPoints: Math.max(0, Math.min(maxPoints, Math.round(Number(parsed.estimatedPoints || 0)))),
         maxPoints,
-        model,
+        model: resolvedModel,
         disclaimer: 'AI-Assisted Estimate — Not Official TOPCIT Evaluation',
       });
     }
@@ -149,7 +171,7 @@ Return ONLY JSON matching:
   "explanation": string,
   "estimatedSeconds": number
 }`;
-      const rawText = await callGemini(apiKey, model, genPrompt, true);
+      const { text: rawText } = await callGemini(apiKey, model, genPrompt, true);
       const draft = JSON.parse(rawText);
       return jsonResponse({
         ok: true,
