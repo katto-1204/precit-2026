@@ -22,7 +22,14 @@ function jsonResponse(payload, status = 200) {
   });
 }
 
-const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite'];
+const FALLBACK_MODELS = [
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.7-flash',
+  'gemini-3.8-flash',
+  'gemini-flash-latest',
+];
 
 async function callGeminiSingleModel(apiKey, model, prompt, jsonMode = false, retries = 2) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
@@ -69,11 +76,11 @@ async function callGemini(apiKey, preferredModel, prompt, jsonMode = false) {
   let lastError = null;
   for (const candidate of candidates) {
     try {
-      return await callGeminiSingleModel(apiKey, candidate, prompt, jsonMode);
+      return await callGeminiSingleModel(apiKey, candidate, prompt, jsonMode, 1);
     } catch (err) {
       lastError = err;
-      // Only try next model on 404 (model deprecated / unavailable for account)
-      if (err && err.httpStatus === 404) {
+      // Rotate to next available Flash model on 404 (deprecated), 503 (high demand), or 429 (rate limit)
+      if (err && (err.httpStatus === 404 || err.httpStatus === 503 || err.httpStatus === 429)) {
         continue;
       }
       throw err;
@@ -83,8 +90,8 @@ async function callGemini(apiKey, preferredModel, prompt, jsonMode = false) {
 }
 
 export default async function handler(req) {
-  const apiKey = process.env.GEMINI_API_KEY || '';
-  const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+  const apiKey = (process.env.GEMINI_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+  const model = (process.env.GEMINI_MODEL || 'gemini-3.6-flash').trim().replace(/^["']|["']$/g, '');
   const enabled = process.env.GEMINI_AI_ENABLED !== 'false';
   const url = new URL(req.url);
   const subpath = url.pathname.replace(/^\/api\/ai\/?/, '');

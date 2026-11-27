@@ -32,9 +32,16 @@ for (const envFile of ['.env', '.env.local']) {
 }
 
 const PORT = Number(process.env.API_PORT || 8788);
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-const FALLBACK_MODELS = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.5-flash-lite'];
+const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim().replace(/^["']|["']$/g, '');
+const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-3.6-flash').trim().replace(/^["']|["']$/g, '');
+const FALLBACK_MODELS = [
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.7-flash',
+  'gemini-3.8-flash',
+  'gemini-flash-latest',
+];
 const GEMINI_DAILY_LIMIT = Number(process.env.GEMINI_DAILY_REQUEST_LIMIT || 50);
 const GEMINI_ENABLED = process.env.GEMINI_AI_ENABLED !== 'false';
 
@@ -94,7 +101,7 @@ async function callSingleGeminiModel(model, prompt, systemInstruction, jsonMode 
   throw new Error('Gemini request failed after retries.');
 }
 
-async function callGeminiWithBackoff(prompt, systemInstruction, jsonMode = false, retries = 2) {
+async function callGeminiWithBackoff(prompt, systemInstruction, jsonMode = false, retries = 1) {
   const candidates = Array.from(new Set([GEMINI_MODEL, ...FALLBACK_MODELS].filter(Boolean)));
   let lastError = null;
   for (const candidate of candidates) {
@@ -102,7 +109,8 @@ async function callGeminiWithBackoff(prompt, systemInstruction, jsonMode = false
       return await callSingleGeminiModel(candidate, prompt, systemInstruction, jsonMode, retries);
     } catch (err) {
       lastError = err;
-      if (err && err.httpStatus === 404) {
+      // Automatically rotate to next available Flash model on 404 (deprecated), 503 (high demand), or 429 (rate limit)
+      if (err && (err.httpStatus === 404 || err.httpStatus === 503 || err.httpStatus === 429)) {
         continue;
       }
       throw err;
