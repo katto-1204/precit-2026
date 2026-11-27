@@ -323,9 +323,9 @@ export async function gradeCodingSubmission(
       ...(tc.isHidden
         ? {}
         : {
-            actualOutput: actualNorm,
-            expectedOutput: expectedNorm,
-          }),
+          actualOutput: actualNorm,
+          expectedOutput: expectedNorm,
+        }),
       stderr: exec.stderr || undefined,
     });
   }

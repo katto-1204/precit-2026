@@ -431,11 +431,10 @@ export function SettingsPage() {
                           type="button"
                           onClick={() => toggleLanguage(lang.id)}
                           aria-pressed={active}
-                          className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${
-                            active
-                              ? 'border-brand-600 bg-brand-50 text-brand-700'
-                              : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                          }`}
+                          className={`rounded-md border px-3 py-1.5 text-xs font-medium transition-colors cursor-pointer ${active
+                            ? 'border-brand-600 bg-brand-50 text-brand-700'
+                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                            }`}
                         >
                           {lang.label}
                         </button>
@@ -447,11 +446,10 @@ export function SettingsPage() {
                 {profileStatus ? (
                   <div
                     role="status"
-                    className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs ${
-                      profileStatus.type === 'ok'
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                        : 'border-red-200 bg-red-50 text-red-700'
-                    }`}
+                    className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs ${profileStatus.type === 'ok'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                      : 'border-red-200 bg-red-50 text-red-700'
+                      }`}
                   >
                     {profileStatus.type === 'ok' ? (
                       <CheckCircle2 className="h-4 w-4 shrink-0" />
@@ -839,11 +837,10 @@ export function SettingsPage() {
               {backupFeedback ? (
                 <div
                   role="status"
-                  className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs ${
-                    backupFeedback.type === 'ok'
-                      ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                      : 'border-red-200 bg-red-50 text-red-700'
-                  }`}
+                  className={`flex items-center gap-2 rounded-md border px-3 py-2 text-xs ${backupFeedback.type === 'ok'
+                    ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                    : 'border-red-200 bg-red-50 text-red-700'
+                    }`}
                 >
                   {backupFeedback.type === 'ok' ? (
                     <CheckCircle2 className="h-4 w-4 shrink-0" />
